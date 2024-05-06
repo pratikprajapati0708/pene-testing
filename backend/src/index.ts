@@ -1,8 +1,11 @@
 import  express from "express";
 import rateLimit from 'express-rate-limit';
+import cors from "cors";
 const app = express();
 app.use(express.json());
 
+app.use(cors());
+const SECRET_KEY = "your_site_secret";
 const PORT = 3000;
 
 const otpLimiter = rateLimit({
@@ -39,13 +42,28 @@ app.post('/generate',otpLimiter,(req,res)=>{
 });
 
 //Endoint to reset password 
-app.post('/reset-password',passwordResetLimiter,(req,res)=>{
-    const {email,otp,newPassword} = req.body;
+app.post('/reset-password',passwordResetLimiter,async(req,res)=>{
+    const {email,otp,newPassword,token} = req.body;
+    let formData = new FormData();
+	formData.append('secret', SECRET_KEY);
+	formData.append('response', token);
+
+  const url = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+	const result = await fetch(url, {
+		body: formData,
+		method: 'POST',
+	});
+  const challengeSucceeded = (await result.json()).success;
+
+  if (!challengeSucceeded) {
+    return res.status(403).json({ message: "Invalid reCAPTCHA token" });
+  }
     if(!email || !otp || !newPassword){
         res.status(411).json({
             message : 'Email, otp and new password is required'
         })
     }
+
     if (otpStore[email] === otp){
         console.log(`Password for ${email} has been reset to ${newPassword}`);
         delete otpStore[email];
